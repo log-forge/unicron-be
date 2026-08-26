@@ -1,0 +1,468 @@
+name: ${CENTRAL_COMPOSE_PROJECT_NAME:-unicron-central}
+
+services:
+  storage-init:
+    image: ${UNICRON_CENTRAL_IMAGE:-docker.io/junaidquraishi/unicron-business:central-stable}
+    user: root
+    environment:
+      CENTRAL_AUTH_SECRET: ${CENTRAL_AUTH_SECRET:-}
+      CENTRAL_COMPOSE_PROJECT_NAME: ${CENTRAL_COMPOSE_PROJECT_NAME:-unicron-central}
+      CENTRAL_CUSTOM_SCRIPT_RUNNER_TOKEN: ${CENTRAL_CUSTOM_SCRIPT_RUNNER_TOKEN:-}
+      CENTRAL_DEPLOYMENT_DNS_NAMES: ${CENTRAL_DEPLOYMENT_DNS_NAMES:-localhost}
+      CENTRAL_DEPLOYMENT_IP_SANS: ${CENTRAL_DEPLOYMENT_IP_SANS:-127.0.0.1}
+      CENTRAL_ECHO_MTLS_PUBLIC_URL: ${CENTRAL_ECHO_MTLS_PUBLIC_URL:-https://localhost:9443}
+      CENTRAL_ECHO_PUBLIC_URL: ${CENTRAL_ECHO_PUBLIC_URL:-https://localhost}
+      CENTRAL_ENTITLEMENT_CREDENTIAL_KEY: ${CENTRAL_ENTITLEMENT_CREDENTIAL_KEY:-}
+      CENTRAL_HTTPS_PORT: ${CENTRAL_HTTPS_PORT:-443}
+      CENTRAL_MTLS_INGRESS_SECRET: ${CENTRAL_MTLS_INGRESS_SECRET:-}
+      CENTRAL_MTLS_PORT: ${CENTRAL_MTLS_PORT:-9443}
+      CENTRAL_OPERATOR_DATA_ROOT: ${CENTRAL_OPERATOR_DATA_ROOT:-${PWD}/data}
+      CENTRAL_OPERATOR_LOCALHOST_ENABLED: ${CENTRAL_OPERATOR_LOCALHOST_ENABLED:-true}
+      CENTRAL_OWNER_USERNAME: ${CENTRAL_OWNER_USERNAME:-owner}
+      CENTRAL_POSTGRES_DB: ${CENTRAL_POSTGRES_DB:-unicron}
+      CENTRAL_POSTGRES_PASSWORD: ${CENTRAL_POSTGRES_PASSWORD:-}
+      CENTRAL_POSTGRES_USER: ${CENTRAL_POSTGRES_USER:-unicron}
+      CENTRAL_PRODUCT_UPDATE_ALLOW_INSECURE_LOOPBACK_REGISTRY: ${CENTRAL_PRODUCT_UPDATE_ALLOW_INSECURE_LOOPBACK_REGISTRY:-false}
+      CENTRAL_PRODUCT_UPDATE_RELEASE_CHANNEL_REF: ${CENTRAL_PRODUCT_UPDATE_RELEASE_CHANNEL_REF:-docker.io/junaidquraishi/unicron-business:release-stable}
+      CENTRAL_PUBLIC_URL: ${CENTRAL_PUBLIC_URL:-https://localhost}
+      CENTRAL_SENTINEL_URL: ${CENTRAL_SENTINEL_URL:-https://sentinel.logforge.dev}
+      UNICRON_BOOTSTRAP_RELEASE_REF: ${UNICRON_BOOTSTRAP_RELEASE_REF:-docker.io/junaidquraishi/unicron-business:release-bootstrap-stable}
+      UNICRON_CENTRAL_BOOTSTRAP_IMAGE: ${UNICRON_CENTRAL_IMAGE:-docker.io/junaidquraishi/unicron-business:central-stable}
+      UNICRON_CENTRAL_UPDATER_BOOTSTRAP_IMAGE: ${UNICRON_CENTRAL_UPDATER_IMAGE:-docker.io/junaidquraishi/unicron-business:central-updater-stable}
+    command: ['/usr/local/bin/unicron-storage-init']
+    volumes:
+      - ${CENTRAL_OPERATOR_DATA_ROOT:-${PWD}/data}:/operator-data
+      - .:/bootstrap:ro
+      - runtime-secrets:/runtime-secrets
+    networks:
+      - central-internal
+      - central-ingress
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${CENTRAL_POSTGRES_DB:-unicron}
+      POSTGRES_USER: ${CENTRAL_POSTGRES_USER:-unicron}
+      POSTGRES_PASSWORD: ${CENTRAL_POSTGRES_PASSWORD:-}
+    entrypoint: ['sh', '-ec']
+    command: ['. /run/unicron/runtime-secrets.env; export POSTGRES_PASSWORD="$$CENTRAL_POSTGRES_PASSWORD"; exec docker-entrypoint.sh postgres']
+    volumes:
+      - ${CENTRAL_OPERATOR_DATA_ROOT:-${PWD}/data}/postgres:/var/lib/postgresql/data
+      - runtime-secrets:/run/unicron:ro
+    depends_on:
+      storage-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks:
+      - central-internal
+
+  stepca-init:
+    image: ${UNICRON_CENTRAL_IMAGE:-docker.io/junaidquraishi/unicron-business:central-stable}
+    user: root
+    environment: &central-env
+      NODE_ENV: ${NODE_ENV:-production}
+      CENTRAL_DEPLOYMENT_PROFILE: ${CENTRAL_DEPLOYMENT_PROFILE:-operator}
+      CENTRAL_COMPOSE_PROJECT_NAME: ${CENTRAL_COMPOSE_PROJECT_NAME:-unicron-central}
+      CENTRAL_HOST: 0.0.0.0
+      CENTRAL_PORT: 4000
+      CENTRAL_PUBLIC_URL: ${CENTRAL_PUBLIC_URL:-https://localhost}
+      CENTRAL_ECHO_PUBLIC_URL: ${CENTRAL_ECHO_PUBLIC_URL:-https://localhost}
+      CENTRAL_ECHO_MTLS_PUBLIC_URL: ${CENTRAL_ECHO_MTLS_PUBLIC_URL:-https://localhost:9443}
+      CENTRAL_INTERNAL_URL: ${CENTRAL_INTERNAL_URL:-http://central:4000}
+      CENTRAL_DEPLOYMENT_DNS_NAMES: ${CENTRAL_DEPLOYMENT_DNS_NAMES:-localhost}
+      CENTRAL_DEPLOYMENT_IP_SANS: ${CENTRAL_DEPLOYMENT_IP_SANS:-127.0.0.1}
+      CENTRAL_OPERATOR_LOCALHOST_ENABLED: ${CENTRAL_OPERATOR_LOCALHOST_ENABLED:-true}
+      CENTRAL_DATABASE_URL: ${CENTRAL_DATABASE_URL:-}
+      CENTRAL_AUTH_SECRET: ${CENTRAL_AUTH_SECRET:-}
+      CENTRAL_OWNER_USERNAME: ${CENTRAL_OWNER_USERNAME:-owner}
+      CENTRAL_OWNER_PASSWORD: ${CENTRAL_OWNER_PASSWORD:-}
+      CENTRAL_ECHO_DOCKER_HOST_IMAGE_REF: ${CENTRAL_ECHO_DOCKER_HOST_IMAGE_REF:-}
+      CENTRAL_ECHO_KUBERNETES_IMAGE_REF: ${CENTRAL_ECHO_KUBERNETES_IMAGE_REF:-}
+      CENTRAL_ECHO_DOCKER_HOST_RELEASE_CONFIG_DIGEST: ${CENTRAL_ECHO_DOCKER_HOST_RELEASE_CONFIG_DIGEST:-}
+      CENTRAL_ECHO_DOCKER_HOST_RELEASE_IMAGE_REF: ${CENTRAL_ECHO_DOCKER_HOST_RELEASE_IMAGE_REF:-}
+      CENTRAL_ECHO_KUBERNETES_RELEASE_CONFIG_DIGEST: ${CENTRAL_ECHO_KUBERNETES_RELEASE_CONFIG_DIGEST:-}
+      CENTRAL_ECHO_KUBERNETES_RELEASE_IMAGE_REF: ${CENTRAL_ECHO_KUBERNETES_RELEASE_IMAGE_REF:-}
+      CENTRAL_ECHO_RELEASE_PREDECESSOR_VERSION: ${CENTRAL_ECHO_RELEASE_PREDECESSOR_VERSION:-}
+      CENTRAL_DATA_DIR: /var/lib/unicron/central
+      CENTRAL_PKI_BASE_DIR: /var/lib/unicron/pki
+      CENTRAL_PKI_SIGNER_DIR: /var/lib/unicron/pki/step-ca
+      CENTRAL_PKI_RA_DIR: /var/lib/unicron/pki/ra
+      CENTRAL_PKI_LIFECYCLE_CLIENT_DIR: /var/lib/unicron/pki/lifecycle-client
+      CENTRAL_PKI_TRUST_DIR: /var/lib/unicron/pki/trust
+      CENTRAL_TRAEFIK_TLS_CERT_PATH: /var/lib/unicron/pki/lifecycle-client/certs/central_lifecycle.crt
+      CENTRAL_TRAEFIK_TLS_KEY_PATH: /var/lib/unicron/pki/lifecycle-client/secrets/central_lifecycle.key
+      CENTRAL_PKI_EXPECTED_ROOT_FINGERPRINT: ${CENTRAL_PKI_EXPECTED_ROOT_FINGERPRINT:-}
+      CENTRAL_STEP_CA_URL: https://step-ca:9000
+      CENTRAL_STEPCAS_RA_URL: https://stepcas-ra:9443
+      CENTRAL_RUNTIME_PARITY_PROOF_MODE: ${CENTRAL_RUNTIME_PARITY_PROOF_MODE:-false}
+      CENTRAL_RUNTIME_PARITY_PROOF_CERTIFICATE_DURATION: ${CENTRAL_RUNTIME_PARITY_PROOF_CERTIFICATE_DURATION:-}
+      CENTRAL_MTLS_INGRESS_SECRET: ${CENTRAL_MTLS_INGRESS_SECRET:-}
+      CENTRAL_DEV_MODE: ${CENTRAL_DEV_MODE:-false}
+      CENTRAL_DEV_ENTITLEMENT_ENABLED: ${CENTRAL_DEV_ENTITLEMENT_ENABLED:-false}
+      CENTRAL_ENTITLEMENT_TOKEN: ${CENTRAL_ENTITLEMENT_TOKEN:-}
+      CENTRAL_ENTITLEMENT_ISSUER: ${CENTRAL_ENTITLEMENT_ISSUER:-unicron-sentinel}
+      CENTRAL_ENTITLEMENT_AUDIENCE: ${CENTRAL_ENTITLEMENT_AUDIENCE:-unicron-central}
+      CENTRAL_SENTINEL_URL: ${CENTRAL_SENTINEL_URL:-https://sentinel.logforge.dev}
+      CENTRAL_LOCAL_SYNTHETIC_SENTINEL_HTTP_ENABLED: ${CENTRAL_LOCAL_SYNTHETIC_SENTINEL_HTTP_ENABLED:-false}
+      CENTRAL_BUSINESS_URL: ${CENTRAL_BUSINESS_URL:-}
+      CENTRAL_ENTITLEMENT_CREDENTIAL_KEY: ${CENTRAL_ENTITLEMENT_CREDENTIAL_KEY:-}
+      CENTRAL_SENTINEL_REQUEST_TIMEOUT_MS: ${CENTRAL_SENTINEL_REQUEST_TIMEOUT_MS:-10000}
+      CENTRAL_ENTITLEMENT_REFRESH_LEASE_DURATION_MS: ${CENTRAL_ENTITLEMENT_REFRESH_LEASE_DURATION_MS:-60000}
+      CENTRAL_ENTITLEMENT_REFRESH_POLL_INTERVAL_MS: ${CENTRAL_ENTITLEMENT_REFRESH_POLL_INTERVAL_MS:-60000}
+      CENTRAL_ENTITLEMENT_REFRESH_SHUTDOWN_TIMEOUT_MS: ${CENTRAL_ENTITLEMENT_REFRESH_SHUTDOWN_TIMEOUT_MS:-35000}
+      CENTRAL_ENTITLEMENT_TRUST_REFRESH_INTERVAL_MS: ${CENTRAL_ENTITLEMENT_TRUST_REFRESH_INTERVAL_MS:-86400000}
+      CENTRAL_ENTITLEMENT_TRUST_REFRESH_LEASE_DURATION_MS: ${CENTRAL_ENTITLEMENT_TRUST_REFRESH_LEASE_DURATION_MS:-60000}
+      CENTRAL_ENTITLEMENT_TRUST_REFRESH_POLL_INTERVAL_MS: ${CENTRAL_ENTITLEMENT_TRUST_REFRESH_POLL_INTERVAL_MS:-60000}
+      CENTRAL_ENTITLEMENT_TRUST_REFRESH_RETRY_BASE_MS: ${CENTRAL_ENTITLEMENT_TRUST_REFRESH_RETRY_BASE_MS:-60000}
+      CENTRAL_ENTITLEMENT_TRUST_REFRESH_RETRY_MAX_MS: ${CENTRAL_ENTITLEMENT_TRUST_REFRESH_RETRY_MAX_MS:-3600000}
+      CENTRAL_ENTITLEMENT_TRUST_REFRESH_SHUTDOWN_TIMEOUT_MS: ${CENTRAL_ENTITLEMENT_TRUST_REFRESH_SHUTDOWN_TIMEOUT_MS:-35000}
+      CENTRAL_OPENAPI_ENABLED: ${CENTRAL_OPENAPI_ENABLED:-false}
+      CENTRAL_KAFKA_BROKERS: kafka:9092
+      CENTRAL_KAFKA_CLIENT_ID: ${CENTRAL_KAFKA_CLIENT_ID:-unicron-central}
+      CENTRAL_RETAINED_METRICS_URL: http://victoria-metrics:8428
+      CENTRAL_RETAINED_LOGS_URL: http://victoria-logs:9428
+      CENTRAL_RETAINED_STORE_HEALTH_TIMEOUT_MS: ${CENTRAL_RETAINED_STORE_HEALTH_TIMEOUT_MS:-2000}
+      CENTRAL_RETAINED_QUERY_TIMEOUT_MS: ${CENTRAL_RETAINED_QUERY_TIMEOUT_MS:-10000}
+      CENTRAL_RETAINED_WRITERS_ENABLED: ${CENTRAL_RETAINED_WRITERS_ENABLED:-true}
+      CENTRAL_RETENTION_KAFKA_ADMIN_RECONCILIATION_ENABLED: ${CENTRAL_RETENTION_KAFKA_ADMIN_RECONCILIATION_ENABLED:-true}
+      CENTRAL_RETENTION_REPLAY_RISK_LAG_THRESHOLD_MESSAGES: ${CENTRAL_RETENTION_REPLAY_RISK_LAG_THRESHOLD_MESSAGES:-10000}
+      CENTRAL_RETENTION_WORKER_BATCH_SIZE: ${CENTRAL_RETENTION_WORKER_BATCH_SIZE:-100}
+      CENTRAL_RETENTION_WORKER_RETRY_INITIAL_BACKOFF_MS: ${CENTRAL_RETENTION_WORKER_RETRY_INITIAL_BACKOFF_MS:-1000}
+      CENTRAL_RETENTION_WORKER_RETRY_MAX_BACKOFF_MS: ${CENTRAL_RETENTION_WORKER_RETRY_MAX_BACKOFF_MS:-30000}
+      CENTRAL_RETENTION_WORKER_SHUTDOWN_TIMEOUT_MS: ${CENTRAL_RETENTION_WORKER_SHUTDOWN_TIMEOUT_MS:-10000}
+      CENTRAL_RETENTION_WRITER_DELAYED_LAG_THRESHOLD_MESSAGES: ${CENTRAL_RETENTION_WRITER_DELAYED_LAG_THRESHOLD_MESSAGES:-1000}
+      CENTRAL_RETENTION_WRITER_BLOCKED_LAG_THRESHOLD_MESSAGES: ${CENTRAL_RETENTION_WRITER_BLOCKED_LAG_THRESHOLD_MESSAGES:-100000}
+      CENTRAL_SIREN_EVALUATION_ENABLED: ${CENTRAL_SIREN_EVALUATION_ENABLED:-true}
+      CENTRAL_SIREN_LOGS_CONSUMER_GROUP_ID: ${CENTRAL_SIREN_LOGS_CONSUMER_GROUP_ID:-central-siren-logs-v1}
+      CENTRAL_SIREN_EVALUATION_BATCH_SIZE: ${CENTRAL_SIREN_EVALUATION_BATCH_SIZE:-100}
+      CENTRAL_SIREN_EVALUATION_RETRY_INITIAL_BACKOFF_MS: ${CENTRAL_SIREN_EVALUATION_RETRY_INITIAL_BACKOFF_MS:-1000}
+      CENTRAL_SIREN_EVALUATION_RETRY_MAX_BACKOFF_MS: ${CENTRAL_SIREN_EVALUATION_RETRY_MAX_BACKOFF_MS:-30000}
+      CENTRAL_SIREN_EVALUATION_SHUTDOWN_TIMEOUT_MS: ${CENTRAL_SIREN_EVALUATION_SHUTDOWN_TIMEOUT_MS:-10000}
+      CENTRAL_SIREN_EVALUATOR_REPLAY_RISK_LAG_THRESHOLD_MESSAGES: ${CENTRAL_SIREN_EVALUATOR_REPLAY_RISK_LAG_THRESHOLD_MESSAGES:-10000}
+      CENTRAL_SIREN_EVALUATOR_DELAYED_LAG_THRESHOLD_MESSAGES: ${CENTRAL_SIREN_EVALUATOR_DELAYED_LAG_THRESHOLD_MESSAGES:-1000}
+      CENTRAL_SIREN_EVALUATOR_BLOCKED_LAG_THRESHOLD_MESSAGES: ${CENTRAL_SIREN_EVALUATOR_BLOCKED_LAG_THRESHOLD_MESSAGES:-100000}
+      CENTRAL_SIREN_LATE_EVENT_GRACE_MS: ${CENTRAL_SIREN_LATE_EVENT_GRACE_MS:-30000}
+      CENTRAL_TELEMETRY_POLICY_DEFAULT_HOT_RETENTION: ${CENTRAL_TELEMETRY_POLICY_DEFAULT_HOT_RETENTION:-7d}
+      CENTRAL_TELEMETRY_INGEST_MAX_BYTES: ${CENTRAL_TELEMETRY_INGEST_MAX_BYTES:-1048576}
+      CENTRAL_LOG_LEVEL: ${CENTRAL_LOG_LEVEL:-info}
+    command: ['sh', '-ec', 'set -a; . /run/unicron/runtime-secrets.env; . /run/unicron/release.env; set +a; node dist/cli/pki-material-init.cjs && chown -R node:node /var/lib/unicron/pki/lifecycle-client /var/lib/unicron/pki/trust']
+    volumes:
+      - ${CENTRAL_OPERATOR_DATA_ROOT:-${PWD}/data}/central:/var/lib/unicron/central
+      - ${CENTRAL_OPERATOR_DATA_ROOT:-${PWD}/data}/pki/lifecycle-client:/var/lib/unicron/pki/lifecycle-client
+      - ${CENTRAL_OPERATOR_DATA_ROOT:-${PWD}/data}/pki/ra:/var/lib/unicron/pki/ra
+      - ${CENTRAL_OPERATOR_DATA_ROOT:-${PWD}/data}/pki/step-ca:/var/lib/unicron/pki/step-ca
+      - ${CENTRAL_OPERATOR_DATA_ROOT:-${PWD}/data}/pki/trust:/var/lib/unicron/pki/trust
+      - runtime-secrets:/run/unicron:ro
+    depends_on:
+      storage-init:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+    networks:
+      - central-internal
+
+  traefik-config:
+    image: ${UNICRON_CENTRAL_IMAGE:-docker.io/junaidquraishi/unicron-business:central-stable}
+    user: root
+    environment: *central-env
+    command: ['sh', '-ec', 'set -a; . /run/unicron/runtime-secrets.env; . /run/unicron/release.env; set +a; node dist/cli/render-operator-traefik.cjs > /etc/traefik/dynamic/central.yaml']
+    volumes:
+      - traefik-dynamic:/etc/traefik/dynamic
+      - runtime-secrets:/run/unicron:ro
+    depends_on:
+      stepca-init:
+        condition: service_completed_successfully
+    networks:
+      - central-internal
+
+  central:
+    image: ${UNICRON_CENTRAL_IMAGE:-docker.io/junaidquraishi/unicron-business:central-stable}
+    environment:
+      <<: *central-env
+      CENTRAL_CUSTOM_SCRIPT_RUNNER_TOKEN: ${CENTRAL_CUSTOM_SCRIPT_RUNNER_TOKEN:-}
+      CENTRAL_CUSTOM_SCRIPT_RUNNER_URL: ${CENTRAL_CUSTOM_SCRIPT_RUNNER_URL:-http://custom-script-runner:4010}
+      CENTRAL_PRODUCT_UPDATE_ALLOW_INSECURE_LOOPBACK_REGISTRY: ${CENTRAL_PRODUCT_UPDATE_ALLOW_INSECURE_LOOPBACK_REGISTRY:-false}
+      CENTRAL_PRODUCT_UPDATE_CENTRAL_UPDATER_IMAGE_REF: ${CENTRAL_PRODUCT_UPDATE_CENTRAL_UPDATER_IMAGE_REF:-}
+      CENTRAL_PRODUCT_UPDATE_MODE: ${CENTRAL_PRODUCT_UPDATE_MODE:-connected}
+      CENTRAL_PRODUCT_UPDATE_OFFLINE_BUNDLE_MAX_BYTES: ${CENTRAL_PRODUCT_UPDATE_OFFLINE_BUNDLE_MAX_BYTES:-68719476736}
+      CENTRAL_PRODUCT_UPDATE_GHOST_DOCKER_IMAGE_REF: ${CENTRAL_PRODUCT_UPDATE_GHOST_DOCKER_IMAGE_REF:-}
+      CENTRAL_PRODUCT_UPDATE_RELEASE_CHANNEL_REF: ${CENTRAL_PRODUCT_UPDATE_RELEASE_CHANNEL_REF:-docker.io/junaidquraishi/unicron-business:release-stable}
+      CENTRAL_PRODUCT_UPDATE_UPDATER_ASSIGNMENT_DIR: /var/lib/unicron/central/product-updates/updater
+      NODE_EXTRA_CA_CERTS: /var/lib/unicron/pki/trust/root_ca.crt
+    command: ['sh', '-ec', 'set -a; . /run/unicron/runtime-secrets.env; . /run/unicron/release.env; set +a; node dist/db/migrate.cjs && exec node dist/index.cjs']
+    volumes:
+      - ${CENTRAL_OPERATOR_DATA_ROOT:-${PWD}/data}/central:/var/lib/unicron/central
+      - ${CENTRAL_OPERATOR_DATA_ROOT:-${PWD}/data}/pki/lifecycle-client:/var/lib/unicron/pki/lifecycle-client:ro
+      - ${CENTRAL_OPERATOR_DATA_ROOT:-${PWD}/data}/pki/trust:/var/lib/unicron/pki/trust:ro
+      - runtime-secrets:/run/unicron:ro
+    depends_on:
+      storage-init:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      stepca-init:
+        condition: service_completed_successfully
+      stepcas-ra:
+        condition: service_healthy
+    expose:
+      - '4000'
+    healthcheck:
+      test: ['CMD', 'node', '-e', "fetch('http://127.0.0.1:4000/healthz').then((response) => { if (!response.ok) process.exit(1) }).catch(() => process.exit(1))"]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+      start_period: 15s
+    networks:
+      - central-internal
+      - central-ingress
+
+  central-updater:
+    image: ${UNICRON_CENTRAL_UPDATER_IMAGE:-docker.io/junaidquraishi/unicron-business:central-updater-stable}
+    user: '0:1000'
+    volumes:
+      - ${CENTRAL_OPERATOR_DATA_ROOT:-${PWD}/data}/central/product-updates:/var/lib/unicron/central/product-updates:rw
+      - ${CENTRAL_OPERATOR_DATA_ROOT:-${PWD}/data}/product-updates:/var/lib/unicron/product-updates:rw
+      - /var/run/docker.sock:/var/run/docker.sock:rw
+    depends_on:
+      storage-init:
+        condition: service_completed_successfully
+    network_mode: none
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=16m
+    cap_drop:
+      - ALL
+    cap_add:
+      - DAC_OVERRIDE
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 64
+    mem_limit: 128m
+    init: true
+    restart: unless-stopped
+
+  custom-script-runner:
+    image: ${UNICRON_CENTRAL_IMAGE:-docker.io/junaidquraishi/unicron-business:central-stable}
+    user: '0:0'
+    command: ['sh', '-ec', '. /run/unicron/runtime-secrets.env; export CUSTOM_SCRIPT_RUNNER_TOKEN="$$CENTRAL_CUSTOM_SCRIPT_RUNNER_TOKEN"; exec node dist/cli/custom-script-runner.cjs']
+    environment:
+      CUSTOM_SCRIPT_RUNNER_CONCURRENCY: '1'
+      CUSTOM_SCRIPT_RUNNER_HOST: 0.0.0.0
+      CUSTOM_SCRIPT_RUNNER_JOB_GID: '1000'
+      CUSTOM_SCRIPT_RUNNER_JOB_UID: '1000'
+      CUSTOM_SCRIPT_RUNNER_PORT: '4010'
+      CUSTOM_SCRIPT_RUNNER_SUPERVISOR_GID: '0'
+      CUSTOM_SCRIPT_RUNNER_SUPERVISOR_UID: '0'
+      CUSTOM_SCRIPT_RUNNER_TOKEN: ${CENTRAL_CUSTOM_SCRIPT_RUNNER_TOKEN:-}
+      CUSTOM_SCRIPT_RUNNER_WORKSPACE_ROOT: /tmp/unicron-custom-script-runner
+    volumes:
+      - runtime-secrets:/run/unicron:ro
+    depends_on:
+      storage-init:
+        condition: service_completed_successfully
+    expose:
+      - '4010'
+    read_only: true
+    tmpfs:
+      - /tmp/unicron-custom-script-runner:rw,noexec,nosuid,nodev,size=67108864,mode=0711,uid=0,gid=0
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - KILL
+      - SETGID
+      - SETUID
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 64
+    init: true
+    stop_grace_period: 10s
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          '. /run/unicron/runtime-secrets.env; export CUSTOM_SCRIPT_RUNNER_TOKEN="$$CENTRAL_CUSTOM_SCRIPT_RUNNER_TOKEN"; node -e ''fetch("http://127.0.0.1:4010/internal/v1/custom-script-runner/health", { headers: { authorization: "Bearer " + process.env.CUSTOM_SCRIPT_RUNNER_TOKEN } }).then((response) => { if (!response.ok) process.exit(1); }).catch(() => process.exit(1))''',
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+    networks:
+      - central-internal
+
+  kafka:
+    image: apache/kafka:3.9.1
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: controller,broker
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'false'
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+    volumes:
+      - ${CENTRAL_OPERATOR_DATA_ROOT:-${PWD}/data}/kafka:/var/lib/kafka/data
+    depends_on:
+      storage-init:
+        condition: service_completed_successfully
+    expose:
+      - '9092'
+    healthcheck:
+      test: ['CMD-SHELL', '/opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --list >/dev/null 2>&1']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+    networks:
+      - central-internal
+
+  victoria-metrics:
+    image: victoriametrics/victoria-metrics:v1.145.0
+    command:
+      - -httpListenAddr=:8428
+      - -storageDataPath=/storage/vmetrics
+      - -retentionPeriod=${CENTRAL_TELEMETRY_POLICY_DEFAULT_HOT_RETENTION:-7d}
+      - -opentelemetry.promoteAllResourceAttributes=false
+      - -opentelemetry.promoteScopeMetadata=false
+      - -opentelemetry.promoteResourceAttributes=unicron.deployment.id,unicron.environment.id,unicron.echo.id,unicron.workload.id,unicron.runtime.type,unicron.telemetry.source_id,unicron.telemetry.source_kind,unicron.telemetry.signal,unicron.telemetry.preferred_source,unicron.telemetry.actual_source
+    volumes:
+      - ${CENTRAL_OPERATOR_DATA_ROOT:-${PWD}/data}/victoria-metrics:/storage/vmetrics
+    depends_on:
+      storage-init:
+        condition: service_completed_successfully
+    expose:
+      - '8428'
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -qO- http://127.0.0.1:8428/health >/dev/null 2>&1']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+    networks:
+      - central-internal
+
+  victoria-logs:
+    image: victoriametrics/victoria-logs:v1.24.0-victorialogs
+    command:
+      - -httpListenAddr=:9428
+      - -storageDataPath=/storage/vlogs
+      - -retentionPeriod=${CENTRAL_TELEMETRY_POLICY_DEFAULT_HOT_RETENTION:-7d}
+    volumes:
+      - ${CENTRAL_OPERATOR_DATA_ROOT:-${PWD}/data}/victoria-logs:/storage/vlogs
+    depends_on:
+      storage-init:
+        condition: service_completed_successfully
+    expose:
+      - '9428'
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -qO- http://127.0.0.1:9428/health >/dev/null 2>&1']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+    networks:
+      - central-internal
+
+  traefik:
+    image: traefik:v3.4
+    command:
+      - '--providers.file.filename=/etc/traefik/dynamic/central.yaml'
+      - '--providers.file.watch=true'
+      - '--entrypoints.websecure.address=:443'
+      - '--entrypoints.websecure.transport.respondingtimeouts.readtimeout=30m'
+      - '--entrypoints.websecure.http.tls.options=central-default@file'
+      - '--entrypoints.mtls.address=:8443'
+      - '--entrypoints.mtls.http.tls=true'
+      - '--entrypoints.mtls.http.tls.options=mtls@file'
+      - '--api.dashboard=false'
+    ports:
+      - '${CENTRAL_HTTPS_PORT:-443}:443'
+      - '${CENTRAL_MTLS_PORT:-9443}:8443'
+    volumes:
+      - traefik-dynamic:/etc/traefik/dynamic:ro
+      - ${CENTRAL_OPERATOR_DATA_ROOT:-${PWD}/data}/pki/lifecycle-client:/var/lib/unicron/pki/lifecycle-client:ro
+      - ${CENTRAL_OPERATOR_DATA_ROOT:-${PWD}/data}/pki/trust:/var/lib/unicron/pki/trust:ro
+    depends_on:
+      traefik-config:
+        condition: service_completed_successfully
+      central:
+        condition: service_started
+    networks:
+      central-ingress:
+        aliases:
+          - central-gateway.unicron.local
+
+  step-ca:
+    image: smallstep/step-ca:0.29.0
+    user: root
+    entrypoint: ['step-ca']
+    command:
+      - --password-file
+      - /var/lib/unicron/pki/step-ca/secrets/ca_password
+      - /var/lib/unicron/pki/step-ca/config/ca.json
+    volumes:
+      - ${CENTRAL_OPERATOR_DATA_ROOT:-${PWD}/data}/pki/step-ca:/var/lib/unicron/pki/step-ca
+    expose:
+      - '9000'
+    depends_on:
+      stepca-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ['CMD', 'curl', '--fail', '-sk', 'https://localhost:9000/health']
+      interval: 5s
+      timeout: 5s
+      retries: 15
+      start_period: 5s
+    networks:
+      - central-internal
+
+  stepcas-ra:
+    image: smallstep/step-ca:0.29.0
+    user: root
+    entrypoint: ['step-ca']
+    command:
+      - --issuer-password-file
+      - /var/lib/unicron/pki/ra/secrets/ra_issuer_password
+      - /var/lib/unicron/pki/ra/config/ra-ca.json
+    volumes:
+      - ${CENTRAL_OPERATOR_DATA_ROOT:-${PWD}/data}/pki/ra:/var/lib/unicron/pki/ra
+      - ${CENTRAL_OPERATOR_DATA_ROOT:-${PWD}/data}/pki/trust:/var/lib/unicron/pki/trust:ro
+    expose:
+      - '9443'
+    depends_on:
+      stepca-init:
+        condition: service_completed_successfully
+      step-ca:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD', 'curl', '--fail', '-sk', 'https://localhost:9443/health']
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 5s
+    networks:
+      - central-internal
+
+networks:
+  central-ingress:
+    name: ${CENTRAL_COMPOSE_PROJECT_NAME:-unicron-central}-central-ingress
+  central-internal:
+    internal: true
+
+volumes:
+  runtime-secrets:
+  traefik-dynamic:

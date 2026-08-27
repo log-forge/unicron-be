@@ -193,7 +193,7 @@ services:
       CENTRAL_PRODUCT_UPDATE_RELEASE_CHANNEL_REF: ${CENTRAL_PRODUCT_UPDATE_RELEASE_CHANNEL_REF:-docker.io/junaidquraishi/unicron-business:release-stable}
       CENTRAL_PRODUCT_UPDATE_UPDATER_ASSIGNMENT_DIR: /var/lib/unicron/central/product-updates/updater
       NODE_EXTRA_CA_CERTS: /var/lib/unicron/pki/trust/root_ca.crt
-    command: ['sh', '-ec', 'set -a; . /run/unicron/runtime-secrets.env; . /run/unicron/release.env; set +a; node dist/db/migrate.cjs && exec node dist/index.cjs']
+    command: ['sh', '-ec', 'set -a; . /run/unicron/runtime-secrets.env; if [ -z "$${CENTRAL_PRODUCT_UPDATE_CENTRAL_UPDATER_IMAGE_REF:-}" ]; then . /run/unicron/release.env; fi; set +a; node dist/db/migrate.cjs && exec node dist/index.cjs']
     volumes:
       - ${CENTRAL_OPERATOR_DATA_ROOT:-${PWD}/data}/central:/var/lib/unicron/central
       - ${CENTRAL_OPERATOR_DATA_ROOT:-${PWD}/data}/pki/lifecycle-client:/var/lib/unicron/pki/lifecycle-client:ro

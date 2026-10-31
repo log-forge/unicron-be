@@ -165,8 +165,33 @@ resume/restore controls. If setup says an image reference differs, finish step
 untouched payload matching the installed version; do not bypass verification.
 
 These are host commands, not automatic boot configuration. If you arrange host
-startup, keep its command aligned with the installed release and update state;
-do not treat a running VM or HTTP 200 alone as Ready. Check the operator
-readiness profile, existing agent identities and fresh telemetry after startup.
+startup, keep its command aligned with the installed release and update state.
+
+### Verify readiness after startup or recovery
+
+Set `ORIGIN` to the HTTPS address configured for this installation, including a
+non-default port when used. This check uses the installation's CA without
+bypassing certificate verification:
+
+```bash
+ORIGIN=https://localhost
+curl --fail --show-error --cacert "$DATA/pki/trust/root_ca.crt" \
+  "$ORIGIN/api/v1/health"
+```
+
+HTTP 200 means the health response was received; inspect its readiness result.
+Before an Echo is enrolled, `readiness.profiles.setup.state` can be `ready`
+while operator readiness is still blocked. Use **Add Remote Agent** to enroll
+the intended Echo, then verify current inventory and fresh workload logs or
+metrics in Central.
+
+For normal operation, `readiness.profiles.operator.state` must be `ready` or
+`ready_with_advisories`, and `readiness.requiredEcho.state` must be `current`.
+Read the profile's `reasons` and `nextActions` for anything pending, degraded
+or blocked. Keep visible advisories, such as a manual CA backup responsibility,
+in the operating record. After a restart or restore, also verify the installed
+version and sign-in, and confirm the existing Echo identities and retained
+telemetry are still present. A running host or successful health request alone
+does not establish those facts.
 
 This is proprietary LogForge software. See `LICENSE` for applicable terms.

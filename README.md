@@ -79,24 +79,31 @@ original installation directory and data in place.
 Download the updater payload for the installed version. The following copies
 files from its public registry artifact without executing that artifact:
 
+Run the following block only after step 2 succeeds. `update-package` must not
+already exist: preserve an existing directory and check your earlier setup
+before retrying. The block stops on a failed command.
+
 ```bash
-case "$(uname -m)" in
-  x86_64) CPU=amd64 ;;
-  aarch64|arm64) CPU=arm64 ;;
-  *) echo "Unsupported Linux CPU" >&2; exit 1 ;;
-esac
-VERSION="$(cat "$DATA/product-updates/deployment/VERSION")"
-CAPSULE="docker.io/junaidquraishi/unicron-business:release-$VERSION-$CPU"
-docker pull --platform "linux/$CPU" "$CAPSULE"
-EXPORTER="$(docker create --entrypoint /not-executed "$CAPSULE")"
-mkdir -p update-package
-docker cp "$EXPORTER:/unicron-release/." ./update-package/
-docker rm "$EXPORTER"
+(
+  set -e
+  mkdir update-package
+  case "$(uname -m)" in
+    x86_64) CPU=amd64 ;;
+    aarch64|arm64) CPU=arm64 ;;
+    *) echo "Unsupported Linux CPU" >&2; exit 1 ;;
+  esac
+  VERSION="$(cat "$DATA/product-updates/deployment/VERSION")"
+  CAPSULE="docker.io/junaidquraishi/unicron-business:release-$VERSION-$CPU"
+  docker pull --platform "linux/$CPU" "$CAPSULE"
+  EXPORTER="$(docker create --entrypoint /not-executed "$CAPSULE")"
+  docker cp "$EXPORTER:/unicron-release/." ./update-package/
+  docker rm "$EXPORTER"
+)
 ```
 
-Use a new, empty `update-package` directory. Leave its files, including
-`operator.env`, unchanged. This is an update payload; it is not the initial
-connected installer and does not contain offline image layers.
+Leave the extracted files, including `operator.env`, unchanged. This is an update
+payload; it is not the initial connected installer and does not contain offline
+image layers.
 
 ```bash
 "$PWD/update-package/unicron-update" \

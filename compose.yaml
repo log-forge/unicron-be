@@ -2,7 +2,7 @@ name: ${CENTRAL_COMPOSE_PROJECT_NAME:-unicron-central}
 
 services:
   storage-init:
-    image: ${UNICRON_CENTRAL_IMAGE:-docker.io/junaidquraishi/unicron-business:central-stable}
+    image: ${UNICRON_CENTRAL_IMAGE:-docker.io/junaidquraishi/unicron-business:central-stable-amd64}
     user: root
     environment:
       CENTRAL_AUTH_SECRET: ${CENTRAL_AUTH_SECRET:-}
@@ -23,16 +23,26 @@ services:
       CENTRAL_POSTGRES_PASSWORD: ${CENTRAL_POSTGRES_PASSWORD:-}
       CENTRAL_POSTGRES_USER: ${CENTRAL_POSTGRES_USER:-unicron}
       CENTRAL_PRODUCT_UPDATE_ALLOW_INSECURE_LOOPBACK_REGISTRY: ${CENTRAL_PRODUCT_UPDATE_ALLOW_INSECURE_LOOPBACK_REGISTRY:-false}
-      CENTRAL_PRODUCT_UPDATE_RELEASE_CHANNEL_REF: ${CENTRAL_PRODUCT_UPDATE_RELEASE_CHANNEL_REF:-docker.io/junaidquraishi/unicron-business:release-stable}
+      CENTRAL_PRODUCT_UPDATE_RELEASE_CHANNEL_REF: ${CENTRAL_PRODUCT_UPDATE_RELEASE_CHANNEL_REF:-docker.io/junaidquraishi/unicron-business:release-stable-amd64}
       CENTRAL_PUBLIC_URL: ${CENTRAL_PUBLIC_URL:-https://localhost}
       CENTRAL_SENTINEL_URL: ${CENTRAL_SENTINEL_URL:-https://sentinel.logforge.dev}
-      UNICRON_BOOTSTRAP_RELEASE_REF: ${UNICRON_BOOTSTRAP_RELEASE_REF:-docker.io/junaidquraishi/unicron-business:release-bootstrap-stable}
-      UNICRON_CENTRAL_BOOTSTRAP_IMAGE: ${UNICRON_CENTRAL_IMAGE:-docker.io/junaidquraishi/unicron-business:central-stable}
-      UNICRON_CENTRAL_UPDATER_BOOTSTRAP_IMAGE: ${UNICRON_CENTRAL_UPDATER_IMAGE:-docker.io/junaidquraishi/unicron-business:central-updater-stable}
+      UNICRON_BOOTSTRAP_RELEASE_REF: ${UNICRON_BOOTSTRAP_RELEASE_REF:-docker.io/junaidquraishi/unicron-business:release-bootstrap-stable-amd64}
+      UNICRON_CENTRAL_BOOTSTRAP_IMAGE: ${UNICRON_CENTRAL_BOOTSTRAP_IMAGE:-docker.io/junaidquraishi/unicron-business:central-stable-amd64}
+      UNICRON_CENTRAL_UPDATER_BOOTSTRAP_IMAGE: ${UNICRON_CENTRAL_UPDATER_BOOTSTRAP_IMAGE:-docker.io/junaidquraishi/unicron-business:central-updater-stable-amd64}
+      CENTRAL_OPERATOR_STARTUP: ${CENTRAL_OPERATOR_STARTUP:-}
     command: ['/usr/local/bin/unicron-storage-init']
     volumes:
-      - ${CENTRAL_OPERATOR_DATA_ROOT:-${PWD}/data}:/operator-data
-      - .:/bootstrap:ro
+      - type: bind
+        source: ${CENTRAL_OPERATOR_DATA_ROOT:-${PWD}/data}
+        target: /operator-data
+        bind:
+          create_host_path: false
+      - type: bind
+        source: .
+        target: /bootstrap
+        read_only: true
+        bind:
+          create_host_path: false
       - runtime-secrets:/runtime-secrets
     networks:
       - central-internal
@@ -47,7 +57,11 @@ services:
     entrypoint: ['sh', '-ec']
     command: ['. /run/unicron/runtime-secrets.env; export POSTGRES_PASSWORD="$$CENTRAL_POSTGRES_PASSWORD"; exec docker-entrypoint.sh postgres']
     volumes:
-      - ${CENTRAL_OPERATOR_DATA_ROOT:-${PWD}/data}/postgres:/var/lib/postgresql/data
+      - type: bind
+        source: ${CENTRAL_OPERATOR_DATA_ROOT:-${PWD}/data}/postgres
+        target: /var/lib/postgresql/data
+        bind:
+          create_host_path: false
       - runtime-secrets:/run/unicron:ro
     depends_on:
       storage-init:
@@ -61,7 +75,7 @@ services:
       - central-internal
 
   stepca-init:
-    image: ${UNICRON_CENTRAL_IMAGE:-docker.io/junaidquraishi/unicron-business:central-stable}
+    image: ${UNICRON_CENTRAL_IMAGE:-docker.io/junaidquraishi/unicron-business:central-stable-amd64}
     user: root
     environment: &central-env
       NODE_ENV: ${NODE_ENV:-production}
@@ -69,6 +83,8 @@ services:
       CENTRAL_COMPOSE_PROJECT_NAME: ${CENTRAL_COMPOSE_PROJECT_NAME:-unicron-central}
       CENTRAL_HOST: 0.0.0.0
       CENTRAL_PORT: 4000
+      PRODUCT_USAGE_COLLECTOR_URL: ${PRODUCT_USAGE_COLLECTOR_URL:-https://usage.logforge.dev/v1/reports}
+      PRODUCT_USAGE_APP_VERSION: ${PRODUCT_USAGE_APP_VERSION:-unknown}
       CENTRAL_PUBLIC_URL: ${CENTRAL_PUBLIC_URL:-https://localhost}
       CENTRAL_ECHO_PUBLIC_URL: ${CENTRAL_ECHO_PUBLIC_URL:-https://localhost}
       CENTRAL_ECHO_MTLS_PUBLIC_URL: ${CENTRAL_ECHO_MTLS_PUBLIC_URL:-https://localhost:9443}
@@ -149,13 +165,38 @@ services:
       CENTRAL_TELEMETRY_POLICY_DEFAULT_HOT_RETENTION: ${CENTRAL_TELEMETRY_POLICY_DEFAULT_HOT_RETENTION:-7d}
       CENTRAL_TELEMETRY_INGEST_MAX_BYTES: ${CENTRAL_TELEMETRY_INGEST_MAX_BYTES:-1048576}
       CENTRAL_LOG_LEVEL: ${CENTRAL_LOG_LEVEL:-info}
-    command: ['sh', '-ec', 'set -a; . /run/unicron/runtime-secrets.env; . /run/unicron/release.env; set +a; node dist/cli/pki-material-init.cjs && chown -R node:node /var/lib/unicron/pki/lifecycle-client /var/lib/unicron/pki/trust']
+    command:
+      [
+        'sh',
+        '-ec',
+        'set -a; . /run/unicron/runtime-secrets.env; . /run/unicron/release.env; set +a; node dist/cli/pki-material-init.cjs && chown -R node:node /var/lib/unicron/pki/lifecycle-client /var/lib/unicron/pki/trust',
+      ]
     volumes:
-      - ${CENTRAL_OPERATOR_DATA_ROOT:-${PWD}/data}/central:/var/lib/unicron/central
-      - ${CENTRAL_OPERATOR_DATA_ROOT:-${PWD}/data}/pki/lifecycle-client:/var/lib/unicron/pki/lifecycle-client
-      - ${CENTRAL_OPERATOR_DATA_ROOT:-${PWD}/data}/pki/ra:/var/lib/unicron/pki/ra
-      - ${CENTRAL_OPERATOR_DATA_ROOT:-${PWD}/data}/pki/step-ca:/var/lib/unicron/pki/step-ca
-      - ${CENTRAL_OPERATOR_DATA_ROOT:-${PWD}/data}/pki/trust:/var/lib/unicron/pki/trust
+      - type: bind
+        source: ${CENTRAL_OPERATOR_DATA_ROOT:-${PWD}/data}/central
+        target: /var/lib/unicron/central
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${CENTRAL_OPERATOR_DATA_ROOT:-${PWD}/data}/pki/lifecycle-client
+        target: /var/lib/unicron/pki/lifecycle-client
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${CENTRAL_OPERATOR_DATA_ROOT:-${PWD}/data}/pki/ra
+        target: /var/lib/unicron/pki/ra
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${CENTRAL_OPERATOR_DATA_ROOT:-${PWD}/data}/pki/step-ca
+        target: /var/lib/unicron/pki/step-ca
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${CENTRAL_OPERATOR_DATA_ROOT:-${PWD}/data}/pki/trust
+        target: /var/lib/unicron/pki/trust
+        bind:
+          create_host_path: false
       - runtime-secrets:/run/unicron:ro
     depends_on:
       storage-init:
@@ -166,10 +207,11 @@ services:
       - central-internal
 
   traefik-config:
-    image: ${UNICRON_CENTRAL_IMAGE:-docker.io/junaidquraishi/unicron-business:central-stable}
+    image: ${UNICRON_CENTRAL_IMAGE:-docker.io/junaidquraishi/unicron-business:central-stable-amd64}
     user: root
     environment: *central-env
-    command: ['sh', '-ec', 'set -a; . /run/unicron/runtime-secrets.env; . /run/unicron/release.env; set +a; node dist/cli/render-operator-traefik.cjs > /etc/traefik/dynamic/central.yaml']
+    command:
+      ['sh', '-ec', 'set -a; . /run/unicron/runtime-secrets.env; . /run/unicron/release.env; set +a; node dist/cli/render-operator-traefik.cjs > /etc/traefik/dynamic/central.yaml']
     volumes:
       - traefik-dynamic:/etc/traefik/dynamic
       - runtime-secrets:/run/unicron:ro
@@ -180,7 +222,7 @@ services:
       - central-internal
 
   central:
-    image: ${UNICRON_CENTRAL_IMAGE:-docker.io/junaidquraishi/unicron-business:central-stable}
+    image: ${UNICRON_CENTRAL_IMAGE:-docker.io/junaidquraishi/unicron-business:central-stable-amd64}
     environment:
       <<: *central-env
       CENTRAL_CUSTOM_SCRIPT_RUNNER_TOKEN: ${CENTRAL_CUSTOM_SCRIPT_RUNNER_TOKEN:-}
@@ -190,14 +232,33 @@ services:
       CENTRAL_PRODUCT_UPDATE_MODE: ${CENTRAL_PRODUCT_UPDATE_MODE:-connected}
       CENTRAL_PRODUCT_UPDATE_OFFLINE_BUNDLE_MAX_BYTES: ${CENTRAL_PRODUCT_UPDATE_OFFLINE_BUNDLE_MAX_BYTES:-68719476736}
       CENTRAL_PRODUCT_UPDATE_GHOST_DOCKER_IMAGE_REF: ${CENTRAL_PRODUCT_UPDATE_GHOST_DOCKER_IMAGE_REF:-}
-      CENTRAL_PRODUCT_UPDATE_RELEASE_CHANNEL_REF: ${CENTRAL_PRODUCT_UPDATE_RELEASE_CHANNEL_REF:-docker.io/junaidquraishi/unicron-business:release-stable}
+      CENTRAL_PRODUCT_UPDATE_RELEASE_CHANNEL_REF: ${CENTRAL_PRODUCT_UPDATE_RELEASE_CHANNEL_REF:-docker.io/junaidquraishi/unicron-business:release-stable-amd64}
       CENTRAL_PRODUCT_UPDATE_UPDATER_ASSIGNMENT_DIR: /var/lib/unicron/central/product-updates/updater
       NODE_EXTRA_CA_CERTS: /var/lib/unicron/pki/trust/root_ca.crt
-    command: ['sh', '-ec', 'set -a; . /run/unicron/runtime-secrets.env; if [ -z "$${CENTRAL_PRODUCT_UPDATE_CENTRAL_UPDATER_IMAGE_REF:-}" ]; then . /run/unicron/release.env; fi; set +a; node dist/db/migrate.cjs && exec node dist/index.cjs']
+    command:
+      [
+        'sh',
+        '-ec',
+        'set -a; . /run/unicron/runtime-secrets.env; if [ -z "$${CENTRAL_PRODUCT_UPDATE_CENTRAL_UPDATER_IMAGE_REF:-}" ]; then . /run/unicron/release.env; fi; set +a; node dist/db/migrate.cjs && exec node dist/index.cjs',
+      ]
     volumes:
-      - ${CENTRAL_OPERATOR_DATA_ROOT:-${PWD}/data}/central:/var/lib/unicron/central
-      - ${CENTRAL_OPERATOR_DATA_ROOT:-${PWD}/data}/pki/lifecycle-client:/var/lib/unicron/pki/lifecycle-client:ro
-      - ${CENTRAL_OPERATOR_DATA_ROOT:-${PWD}/data}/pki/trust:/var/lib/unicron/pki/trust:ro
+      - type: bind
+        source: ${CENTRAL_OPERATOR_DATA_ROOT:-${PWD}/data}/central
+        target: /var/lib/unicron/central
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${CENTRAL_OPERATOR_DATA_ROOT:-${PWD}/data}/pki/lifecycle-client
+        target: /var/lib/unicron/pki/lifecycle-client
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${CENTRAL_OPERATOR_DATA_ROOT:-${PWD}/data}/pki/trust
+        target: /var/lib/unicron/pki/trust
+        read_only: true
+        bind:
+          create_host_path: false
       - runtime-secrets:/run/unicron:ro
     depends_on:
       storage-init:
@@ -223,12 +284,25 @@ services:
       - central-ingress
 
   central-updater:
-    image: ${UNICRON_CENTRAL_UPDATER_IMAGE:-docker.io/junaidquraishi/unicron-business:central-updater-stable}
+    profiles: [legacy-updater]
+    image: ${UNICRON_CENTRAL_UPDATER_IMAGE:-docker.io/junaidquraishi/unicron-business:central-updater-stable-amd64}
     user: '0:1000'
     volumes:
-      - ${CENTRAL_OPERATOR_DATA_ROOT:-${PWD}/data}/central/product-updates:/var/lib/unicron/central/product-updates:rw
-      - ${CENTRAL_OPERATOR_DATA_ROOT:-${PWD}/data}/product-updates:/var/lib/unicron/product-updates:rw
-      - /var/run/docker.sock:/var/run/docker.sock:rw
+      - type: bind
+        source: ${CENTRAL_OPERATOR_DATA_ROOT:-${PWD}/data}/central/product-updates
+        target: /var/lib/unicron/central/product-updates
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${CENTRAL_OPERATOR_DATA_ROOT:-${PWD}/data}/product-updates
+        target: /var/lib/unicron/product-updates
+        bind:
+          create_host_path: false
+      - type: bind
+        source: /var/run/docker.sock
+        target: /var/run/docker.sock
+        bind:
+          create_host_path: false
     depends_on:
       storage-init:
         condition: service_completed_successfully
@@ -248,9 +322,10 @@ services:
     restart: unless-stopped
 
   custom-script-runner:
-    image: ${UNICRON_CENTRAL_IMAGE:-docker.io/junaidquraishi/unicron-business:central-stable}
+    image: ${UNICRON_CENTRAL_IMAGE:-docker.io/junaidquraishi/unicron-business:central-stable-amd64}
     user: '0:0'
-    command: ['sh', '-ec', '. /run/unicron/runtime-secrets.env; export CUSTOM_SCRIPT_RUNNER_TOKEN="$$CENTRAL_CUSTOM_SCRIPT_RUNNER_TOKEN"; exec node dist/cli/custom-script-runner.cjs']
+    command:
+      ['sh', '-ec', '. /run/unicron/runtime-secrets.env; export CUSTOM_SCRIPT_RUNNER_TOKEN="$$CENTRAL_CUSTOM_SCRIPT_RUNNER_TOKEN"; exec node dist/cli/custom-script-runner.cjs']
     environment:
       CUSTOM_SCRIPT_RUNNER_CONCURRENCY: '1'
       CUSTOM_SCRIPT_RUNNER_HOST: 0.0.0.0
@@ -315,7 +390,11 @@ services:
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_LOG_DIRS: /var/lib/kafka/data
     volumes:
-      - ${CENTRAL_OPERATOR_DATA_ROOT:-${PWD}/data}/kafka:/var/lib/kafka/data
+      - type: bind
+        source: ${CENTRAL_OPERATOR_DATA_ROOT:-${PWD}/data}/kafka
+        target: /var/lib/kafka/data
+        bind:
+          create_host_path: false
     depends_on:
       storage-init:
         condition: service_completed_successfully
@@ -323,9 +402,11 @@ services:
       - '9092'
     healthcheck:
       test: ['CMD-SHELL', '/opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --list >/dev/null 2>&1']
-      interval: 5s
-      timeout: 5s
-      retries: 20
+      interval: 30s
+      # Keep a real readiness check without spawning a JVM every five seconds.
+      # Allow cold or emulated JVM startup within the existing timeout.
+      timeout: 60s
+      retries: 3
       start_period: 10s
     networks:
       - central-internal
@@ -340,7 +421,11 @@ services:
       - -opentelemetry.promoteScopeMetadata=false
       - -opentelemetry.promoteResourceAttributes=unicron.deployment.id,unicron.environment.id,unicron.echo.id,unicron.workload.id,unicron.runtime.type,unicron.telemetry.source_id,unicron.telemetry.source_kind,unicron.telemetry.signal,unicron.telemetry.preferred_source,unicron.telemetry.actual_source
     volumes:
-      - ${CENTRAL_OPERATOR_DATA_ROOT:-${PWD}/data}/victoria-metrics:/storage/vmetrics
+      - type: bind
+        source: ${CENTRAL_OPERATOR_DATA_ROOT:-${PWD}/data}/victoria-metrics
+        target: /storage/vmetrics
+        bind:
+          create_host_path: false
     depends_on:
       storage-init:
         condition: service_completed_successfully
@@ -362,7 +447,11 @@ services:
       - -storageDataPath=/storage/vlogs
       - -retentionPeriod=${CENTRAL_TELEMETRY_POLICY_DEFAULT_HOT_RETENTION:-7d}
     volumes:
-      - ${CENTRAL_OPERATOR_DATA_ROOT:-${PWD}/data}/victoria-logs:/storage/vlogs
+      - type: bind
+        source: ${CENTRAL_OPERATOR_DATA_ROOT:-${PWD}/data}/victoria-logs
+        target: /storage/vlogs
+        bind:
+          create_host_path: false
     depends_on:
       storage-init:
         condition: service_completed_successfully
@@ -380,7 +469,7 @@ services:
   traefik:
     image: traefik:v3.4
     command:
-      - '--providers.file.filename=/etc/traefik/dynamic/central.yaml'
+      - '--providers.file.directory=/etc/traefik/dynamic'
       - '--providers.file.watch=true'
       - '--entrypoints.websecure.address=:443'
       - '--entrypoints.websecure.transport.respondingtimeouts.readtimeout=30m'
@@ -394,8 +483,18 @@ services:
       - '${CENTRAL_MTLS_PORT:-9443}:8443'
     volumes:
       - traefik-dynamic:/etc/traefik/dynamic:ro
-      - ${CENTRAL_OPERATOR_DATA_ROOT:-${PWD}/data}/pki/lifecycle-client:/var/lib/unicron/pki/lifecycle-client:ro
-      - ${CENTRAL_OPERATOR_DATA_ROOT:-${PWD}/data}/pki/trust:/var/lib/unicron/pki/trust:ro
+      - type: bind
+        source: ${CENTRAL_OPERATOR_DATA_ROOT:-${PWD}/data}/pki/lifecycle-client
+        target: /var/lib/unicron/pki/lifecycle-client
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${CENTRAL_OPERATOR_DATA_ROOT:-${PWD}/data}/pki/trust
+        target: /var/lib/unicron/pki/trust
+        read_only: true
+        bind:
+          create_host_path: false
     depends_on:
       traefik-config:
         condition: service_completed_successfully
@@ -415,7 +514,11 @@ services:
       - /var/lib/unicron/pki/step-ca/secrets/ca_password
       - /var/lib/unicron/pki/step-ca/config/ca.json
     volumes:
-      - ${CENTRAL_OPERATOR_DATA_ROOT:-${PWD}/data}/pki/step-ca:/var/lib/unicron/pki/step-ca
+      - type: bind
+        source: ${CENTRAL_OPERATOR_DATA_ROOT:-${PWD}/data}/pki/step-ca
+        target: /var/lib/unicron/pki/step-ca
+        bind:
+          create_host_path: false
     expose:
       - '9000'
     depends_on:
@@ -439,8 +542,17 @@ services:
       - /var/lib/unicron/pki/ra/secrets/ra_issuer_password
       - /var/lib/unicron/pki/ra/config/ra-ca.json
     volumes:
-      - ${CENTRAL_OPERATOR_DATA_ROOT:-${PWD}/data}/pki/ra:/var/lib/unicron/pki/ra
-      - ${CENTRAL_OPERATOR_DATA_ROOT:-${PWD}/data}/pki/trust:/var/lib/unicron/pki/trust:ro
+      - type: bind
+        source: ${CENTRAL_OPERATOR_DATA_ROOT:-${PWD}/data}/pki/ra
+        target: /var/lib/unicron/pki/ra
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${CENTRAL_OPERATOR_DATA_ROOT:-${PWD}/data}/pki/trust
+        target: /var/lib/unicron/pki/trust
+        read_only: true
+        bind:
+          create_host_path: false
     expose:
       - '9443'
     depends_on:

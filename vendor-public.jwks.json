@@ -1,0 +1,26 @@
+{
+  "keys": [
+    {
+      "alg": "EdDSA",
+      "crv": "Ed25519",
+      "key_ops": [
+        "verify"
+      ],
+      "kid": "sentinel-entitlement-phase-6c-20260718-current",
+      "kty": "OKP",
+      "use": "sig",
+      "x": "81UqPBY9hmq0S8t9WCj3W5EM0pYYUJtc7XOp1IhRDGY"
+    },
+    {
+      "alg": "EdDSA",
+      "crv": "Ed25519",
+      "key_ops": [
+        "verify"
+      ],
+      "kid": "sentinel-entitlement-phase-6c-20260718-next",
+      "kty": "OKP",
+      "use": "sig",
+      "x": "QkJX-x4JvnD_3BNcifbZokxC8LGzA7L3F2uNjam0vYo"
+    }
+  ]
+}

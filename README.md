@@ -19,14 +19,33 @@ you do not build product source or choose image versions. Existing installations
 use their supported update controls rather than pulling this repository into
 their running deployment or restarting a newer bootstrap over retained data.
 
-These commands use Bash on a Linux host with Docker Engine, Compose v2 and
-systemd. Run them in a Linux administrator shell with access to that Docker
-engine, from the folder containing `compose.yaml`. The public repository also
-supplies independent vendor public signing trust as `vendor-public.jwks.json`.
-If you received only a connected package, obtain that public trust independently
-from LogForge and save it beside the Compose file. Keep it separate from
-downloaded update payloads. Native AMD64 Docker operation is qualified; ARM64 hardware
-qualification remains deferred.
+Use native Linux AMD64 with Git, Docker Engine, Compose v2 and systemd.
+The public repository includes `install.sh` and independent vendor signing trust.
+Leave update headroom: the native updater requires at least 4 GiB of available
+memory and 4 GiB of free disk, beyond resources used by running services.
+Also allow storage for downloads and the database checkpoint. These free-resource
+checks are separate from workload-specific total machine sizing.
+For this normal online path, choose optional settings below, then run:
+
+```bash
+sudo bash ./install.sh
+```
+
+The installer verifies the published release, starts its generated runtime,
+configures the native updater and downloads the complete signed image inventory.
+It keeps the original source package at `update-package` on first success and
+prints its path. Preserve that package and the data directory. If setup finds
+recorded update/recovery state, it stops without replacing that deployment;
+use its existing update controls instead. Open the configured HTTPS address to
+finish Owner setup, then enroll your Docker host. No product source build or
+manual image pulls are required.
+
+The detailed commands below are also available for administrators who received
+the four-file connected package without `install.sh`. Use a Linux administrator
+shell (`sudo -s`), from the folder containing `compose.yaml`. Obtain independent
+vendor public signing trust from LogForge if the package does not include it;
+keep trust separate from downloaded payloads. ARM64 hardware qualification
+remains deferred.
 
 ## 1. Choose the installation address and data location
 
@@ -46,14 +65,14 @@ For a local browser with remote Echo hosts, use a loopback Central URL,
 URLs. Certificate names must cover those hosts. Echo URLs do not become trusted
 browser origins.
 
-In the commands below, set `DATA` to that same data directory:
+For the manual fallback and later checks, set `DATA` to that same data directory:
 
 ```bash
 DATA="$PWD/data"
 mkdir -p "$DATA"
 ```
 
-## 2. Initialize, then start the verified release
+## 2. Manual fallback: initialize and start
 
 ```bash
 docker compose pull
@@ -74,7 +93,7 @@ Expected result: Central starts on the configured HTTPS address. Do not print,
 publish or edit `deployment.env`; it contains generated credentials. Keep the
 original installation directory and data in place.
 
-## 3. Enable browser updates once
+## 3. Manual fallback: enable browser updates once
 
 Download the updater payload for the installed version. The following copies
 files from its public registry artifact without executing that artifact:
@@ -105,12 +124,41 @@ Leave the extracted files, including `operator.env`, unchanged. This is an updat
 payload; it is not the initial connected installer and does not contain offline
 image layers.
 
+Register the native update service and download the installed release's complete
+signed image inventory in the same preparation block. `setup-web` verifies the
+package, including `IMAGE_LOCK`, against independent vendor trust before the
+inventory is read. The CPU check follows that complete verification.
+
 ```bash
-"$PWD/update-package/unicron-update" \
-  --data-root "$DATA" \
-  --installed-package "$PWD/update-package" \
-  --trust "$PWD/vendor-public.jwks.json" setup-web
+(
+  set -e
+  "$PWD/update-package/unicron-update" \
+    --data-root "$DATA" \
+    --installed-package "$PWD/update-package" \
+    --trust "$PWD/vendor-public.jwks.json" setup-web
+  "$PWD/update-package/unicron-update" \
+    --data-root "$DATA" \
+    --installed-package "$PWD/update-package" \
+    --trust "$PWD/vendor-public.jwks.json" verify-platform
+  case "$(uname -m)" in
+    x86_64) SOURCE_PLATFORM=linux/amd64 ;;
+    aarch64|arm64) SOURCE_PLATFORM=linux/arm64 ;;
+    *) echo "Unsupported Linux CPU" >&2; exit 1 ;;
+  esac
+  while IFS="$(printf '\t')" read -r IMAGE_KEY IMAGE_REF IMAGE_TAG IMAGE_CONFIG; do
+    case "$IMAGE_KEY" in
+      *_ARM64_*) IMAGE_PLATFORM=linux/arm64 ;;
+      *_AMD64_*) IMAGE_PLATFORM=linux/amd64 ;;
+      *) IMAGE_PLATFORM="$SOURCE_PLATFORM" ;;
+    esac
+    docker pull --platform "$IMAGE_PLATFORM" "$IMAGE_REF"
+  done < "$PWD/update-package/IMAGE_LOCK"
+)
 ```
+
+Continue only after setup and every download succeeds. Keep the extracted package
+and its `IMAGE_LOCK` unchanged. Helper and agent images are part of the release
+inventory even when its running services have not downloaded them.
 
 Expected result: setup reports configured and installs the native host update
 service. It verifies the package and the running release before registration.
@@ -144,6 +192,12 @@ telemetry, certificates and Echo identity/queued data are not rewound. Verify
 the installed version, sign-in and telemetry after recovery.
 
 ## Startup and troubleshooting
+
+Keep `DATA` set to the retained data directory. If the automatic installer
+reported a different source-package path, use it instead of `update-package`
+in administrator commands. Re-running `install.sh` is for interrupted initial
+setup; it refuses deployments with a recorded product operation.
+
 
 Before the first product update, start an existing fresh installation with the
 same generated runtime command from step 2:

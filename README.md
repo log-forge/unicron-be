@@ -21,6 +21,10 @@ their running deployment or restarting a newer bootstrap over retained data.
 
 Use native Linux AMD64 with Git, Docker Engine, Compose v2 and systemd.
 The public repository includes `install.sh` and independent vendor signing trust.
+Leave update headroom: the native updater requires at least 4 GiB of available
+memory and 4 GiB of free disk, beyond resources used by running services.
+Also allow storage for downloads and the database checkpoint. These free-resource
+checks are separate from workload-specific total machine sizing.
 For this normal online path, choose optional settings below, then run:
 
 ```bash

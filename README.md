@@ -209,13 +209,35 @@ docker compose --project-directory "$PWD" \
 ```
 
 After a product update has created an operation journal, the host update engine
-retains the active release and recovery state. Use its start command:
+retains the active release and recovery state. With `DATA` set to the original
+absolute data directory and Python 3.9 or newer installed, use the installed native executor.
+Its executable may be newer than the original source package; preserve both:
 
 ```bash
-"$PWD/update-package/unicron-update" \
-  --data-root "$DATA" \
-  --installed-package "$PWD/update-package" \
-  --trust "$PWD/vendor-public.jwks.json" start
+sudo python3 - "$DATA" <<'PY'
+import json
+import os
+from pathlib import Path
+import sys
+
+data = Path(sys.argv[1])
+if not data.is_absolute() or data == Path("/") or data.resolve(strict=True) != data:
+    raise SystemExit("Use the original absolute data directory without aliases.")
+root = data / "operator-web"
+config = json.loads((root / "config.json").read_text())
+if config["dataRoot"] != str(data):
+    raise SystemExit("The updater belongs to another data directory.")
+receipt = root / "executor.json"
+transition = json.loads(receipt.read_text()) if receipt.exists() else {}
+if transition.get("pendingPackage"):
+    raise SystemExit("Finish the interrupted updater refresh: repeat its same setup-web --executor-package command before starting.")
+executor = transition.get("currentPackage", config["installedPackage"])
+binary = Path(executor) / "unicron-update"
+if not binary.is_relative_to(root / "packages") or binary.resolve(strict=True) != binary:
+    raise SystemExit("The installed native updater path is unavailable or aliased.")
+os.execv(str(binary), [str(binary), "--data-root", str(data),
+    "--installed-package", config["installedPackage"], "--trust", config["trustPath"], "start"])
+PY
 ```
 
 Do not select product versions with `docker compose pull`, rerun the starter

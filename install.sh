@@ -83,7 +83,7 @@ main() {
     -f "$data/product-updates/deployment/compose.yaml" up -d --wait --wait-timeout 180
 
   work="$(mktemp -d "$root/.logforge-setup.XXXXXXXX")"
-  capsule="docker.io/junaidquraishi/unicron-business:release-$version-amd64"
+  capsule="docker.io/junaidquraishi/unicron-business:release-$version"
   printf 'Obtaining the matching signed update package…\n'
   docker pull --platform linux/amd64 "$capsule"
   exporter="$(docker create --entrypoint /not-executed "$capsule")"

@@ -2,7 +2,7 @@ name: ${CENTRAL_COMPOSE_PROJECT_NAME:-unicron-central}
 
 services:
   storage-init:
-    image: ${UNICRON_CENTRAL_IMAGE:-docker.io/junaidquraishi/unicron-business:central-stable-amd64}
+    image: ${UNICRON_CENTRAL_IMAGE:-docker.io/junaidquraishi/unicron-business:central-stable}
     user: root
     environment:
       CENTRAL_AUTH_SECRET: ${CENTRAL_AUTH_SECRET:-}
@@ -23,12 +23,12 @@ services:
       CENTRAL_POSTGRES_PASSWORD: ${CENTRAL_POSTGRES_PASSWORD:-}
       CENTRAL_POSTGRES_USER: ${CENTRAL_POSTGRES_USER:-unicron}
       CENTRAL_PRODUCT_UPDATE_ALLOW_INSECURE_LOOPBACK_REGISTRY: ${CENTRAL_PRODUCT_UPDATE_ALLOW_INSECURE_LOOPBACK_REGISTRY:-false}
-      CENTRAL_PRODUCT_UPDATE_RELEASE_CHANNEL_REF: ${CENTRAL_PRODUCT_UPDATE_RELEASE_CHANNEL_REF:-docker.io/junaidquraishi/unicron-business:release-stable-amd64}
+      CENTRAL_PRODUCT_UPDATE_RELEASE_CHANNEL_REF: ${CENTRAL_PRODUCT_UPDATE_RELEASE_CHANNEL_REF:-docker.io/junaidquraishi/unicron-business:release-stable}
       CENTRAL_PUBLIC_URL: ${CENTRAL_PUBLIC_URL:-https://localhost}
       CENTRAL_SENTINEL_URL: ${CENTRAL_SENTINEL_URL:-https://sentinel.logforge.dev}
-      UNICRON_BOOTSTRAP_RELEASE_REF: ${UNICRON_BOOTSTRAP_RELEASE_REF:-docker.io/junaidquraishi/unicron-business:release-bootstrap-stable-amd64}
-      UNICRON_CENTRAL_BOOTSTRAP_IMAGE: ${UNICRON_CENTRAL_BOOTSTRAP_IMAGE:-docker.io/junaidquraishi/unicron-business:central-stable-amd64}
-      UNICRON_CENTRAL_UPDATER_BOOTSTRAP_IMAGE: ${UNICRON_CENTRAL_UPDATER_BOOTSTRAP_IMAGE:-docker.io/junaidquraishi/unicron-business:central-updater-stable-amd64}
+      UNICRON_BOOTSTRAP_RELEASE_REF: ${UNICRON_BOOTSTRAP_RELEASE_REF:-docker.io/junaidquraishi/unicron-business:release-bootstrap-stable}
+      UNICRON_CENTRAL_BOOTSTRAP_IMAGE: ${UNICRON_CENTRAL_BOOTSTRAP_IMAGE:-docker.io/junaidquraishi/unicron-business:central-stable}
+      UNICRON_CENTRAL_UPDATER_BOOTSTRAP_IMAGE: ${UNICRON_CENTRAL_UPDATER_BOOTSTRAP_IMAGE:-docker.io/junaidquraishi/unicron-business:central-updater-stable}
       CENTRAL_OPERATOR_STARTUP: ${CENTRAL_OPERATOR_STARTUP:-}
     command: ['/usr/local/bin/unicron-storage-init']
     volumes:
@@ -75,7 +75,7 @@ services:
       - central-internal
 
   stepca-init:
-    image: ${UNICRON_CENTRAL_IMAGE:-docker.io/junaidquraishi/unicron-business:central-stable-amd64}
+    image: ${UNICRON_CENTRAL_IMAGE:-docker.io/junaidquraishi/unicron-business:central-stable}
     user: root
     environment: &central-env
       NODE_ENV: ${NODE_ENV:-production}
@@ -207,7 +207,7 @@ services:
       - central-internal
 
   traefik-config:
-    image: ${UNICRON_CENTRAL_IMAGE:-docker.io/junaidquraishi/unicron-business:central-stable-amd64}
+    image: ${UNICRON_CENTRAL_IMAGE:-docker.io/junaidquraishi/unicron-business:central-stable}
     user: root
     environment: *central-env
     command:
@@ -222,7 +222,7 @@ services:
       - central-internal
 
   central:
-    image: ${UNICRON_CENTRAL_IMAGE:-docker.io/junaidquraishi/unicron-business:central-stable-amd64}
+    image: ${UNICRON_CENTRAL_IMAGE:-docker.io/junaidquraishi/unicron-business:central-stable}
     environment:
       <<: *central-env
       CENTRAL_CUSTOM_SCRIPT_RUNNER_TOKEN: ${CENTRAL_CUSTOM_SCRIPT_RUNNER_TOKEN:-}
@@ -232,7 +232,7 @@ services:
       CENTRAL_PRODUCT_UPDATE_MODE: ${CENTRAL_PRODUCT_UPDATE_MODE:-connected}
       CENTRAL_PRODUCT_UPDATE_OFFLINE_BUNDLE_MAX_BYTES: ${CENTRAL_PRODUCT_UPDATE_OFFLINE_BUNDLE_MAX_BYTES:-68719476736}
       CENTRAL_PRODUCT_UPDATE_GHOST_DOCKER_IMAGE_REF: ${CENTRAL_PRODUCT_UPDATE_GHOST_DOCKER_IMAGE_REF:-}
-      CENTRAL_PRODUCT_UPDATE_RELEASE_CHANNEL_REF: ${CENTRAL_PRODUCT_UPDATE_RELEASE_CHANNEL_REF:-docker.io/junaidquraishi/unicron-business:release-stable-amd64}
+      CENTRAL_PRODUCT_UPDATE_RELEASE_CHANNEL_REF: ${CENTRAL_PRODUCT_UPDATE_RELEASE_CHANNEL_REF:-docker.io/junaidquraishi/unicron-business:release-stable}
       CENTRAL_PRODUCT_UPDATE_UPDATER_ASSIGNMENT_DIR: /var/lib/unicron/central/product-updates/updater
       NODE_EXTRA_CA_CERTS: /var/lib/unicron/pki/trust/root_ca.crt
     command:
@@ -285,7 +285,7 @@ services:
 
   central-updater:
     profiles: [legacy-updater]
-    image: ${UNICRON_CENTRAL_UPDATER_IMAGE:-docker.io/junaidquraishi/unicron-business:central-updater-stable-amd64}
+    image: ${UNICRON_CENTRAL_UPDATER_IMAGE:-docker.io/junaidquraishi/unicron-business:central-updater-stable}
     user: '0:1000'
     volumes:
       - type: bind
@@ -322,7 +322,7 @@ services:
     restart: unless-stopped
 
   custom-script-runner:
-    image: ${UNICRON_CENTRAL_IMAGE:-docker.io/junaidquraishi/unicron-business:central-stable-amd64}
+    image: ${UNICRON_CENTRAL_IMAGE:-docker.io/junaidquraishi/unicron-business:central-stable}
     user: '0:0'
     command:
       ['sh', '-ec', '. /run/unicron/runtime-secrets.env; export CUSTOM_SCRIPT_RUNNER_TOKEN="$$CENTRAL_CUSTOM_SCRIPT_RUNNER_TOKEN"; exec node dist/cli/custom-script-runner.cjs']

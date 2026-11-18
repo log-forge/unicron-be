@@ -21,7 +21,7 @@ their running deployment or restarting a newer bootstrap over retained data.
 
 Use native Linux AMD64 with Git, Docker Engine, Compose v2 and systemd.
 The public repository includes `install.sh` and independent vendor signing trust.
-Leave update headroom: the native updater requires at least 4 GiB of available
+Leave update headroom: the native updater requires at least 512 MiB of available
 memory and 4 GiB of free disk, beyond resources used by running services.
 Also allow storage for downloads and the database checkpoint. These free-resource
 checks are separate from workload-specific total machine sizing.
@@ -108,11 +108,10 @@ before retrying. The block stops on a failed command.
   mkdir update-package
   case "$(uname -m)" in
     x86_64) CPU=amd64 ;;
-    aarch64|arm64) CPU=arm64 ;;
     *) echo "Unsupported Linux CPU" >&2; exit 1 ;;
   esac
   VERSION="$(cat "$DATA/product-updates/deployment/VERSION")"
-  CAPSULE="docker.io/junaidquraishi/unicron-business:release-$VERSION-$CPU"
+  CAPSULE="docker.io/junaidquraishi/unicron-business:release-$VERSION"
   docker pull --platform "linux/$CPU" "$CAPSULE"
   EXPORTER="$(docker create --entrypoint /not-executed "$CAPSULE")"
   docker cp "$EXPORTER:/unicron-release/." ./update-package/
